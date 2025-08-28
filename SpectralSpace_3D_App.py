@@ -66,7 +66,7 @@ def load_model(model_file):
         return None
 
 def sanitize_filename(filename):
-    """Elimina caracteres inválidos de los nombres de archivo"""
+    """Remove invalid characters from filenames"""
     invalid_chars = r'[<>:"/\\|?*]'
     return re.sub(invalid_chars, '_', filename)
 
@@ -90,7 +90,7 @@ def process_uploaded_spectrum(file, reference_frequencies):
         content = file.getvalue().decode("utf-8")
         lines = content.split('\n')
         
-        # Determinar el formato del archivo
+        # Determine file format
         first_line = lines[0].strip()
         second_line = lines[1].strip() if len(lines) > 1 else ""
         
@@ -98,12 +98,12 @@ def process_uploaded_spectrum(file, reference_frequencies):
         param_dict = {}
         data_start_line = 0
         
-        # Formato 1: con header de molécula y parámetros
+        # Format 1: with molecule and parameters header
         if first_line.startswith('//') and 'molecules=' in first_line:
             header = first_line[2:].strip()  # Remove the '//'
             formula = extract_molecule_formula(header)
             
-            # Extraer parámetros del header
+            # Extract parameters from header
             for part in header.split():
                 if '=' in part:
                     try:
@@ -120,34 +120,34 @@ def process_uploaded_spectrum(file, reference_frequencies):
                         continue
             data_start_line = 1
         
-        # Formato 2: con header de columnas
+        # Format 2: with column header
         elif first_line.startswith('!') or first_line.startswith('#'):
-            # Intentar extraer información del header si está disponible
+            # Try to extract information from header if available
             if 'molecules=' in first_line:
                 formula = extract_molecule_formula(first_line)
             data_start_line = 1
         
-        # Formato 3: sin header, solo datos
+        # Format 3: no header, just data
         else:
             data_start_line = 0
-            formula = file.name.split('.')[0]  # Usar nombre del archivo como fórmula
+            formula = file.name.split('.')[0]  # Use filename as formula
 
         spectrum_data = []
         for line in lines[data_start_line:]:
             line = line.strip()
-            # Saltar líneas de comentario o vacías
+            # Skip comment or empty lines
             if not line or line.startswith('!') or line.startswith('#'):
                 continue
                 
             try:
                 parts = line.split()
                 if len(parts) >= 2:
-                    # Intentar diferentes formatos de números
+                    # Try different number formats
                     try:
                         freq = float(parts[0])
                         intensity = float(parts[1])
                     except ValueError:
-                        # Intentar con notación científica que pueda tener D instead of E
+                        # Try with scientific notation that might have D instead of E
                         freq_str = parts[0].replace('D', 'E').replace('d', 'E')
                         intensity_str = parts[1].replace('D', 'E').replace('d', 'E')
                         freq = float(freq_str)
@@ -165,16 +165,16 @@ def process_uploaded_spectrum(file, reference_frequencies):
 
         spectrum_data = np.array(spectrum_data)
 
-        # Ajustar frecuencia si está en GHz (convertir a Hz)
-        if np.max(spectrum_data[:, 0]) < 1e11:  # Si las frecuencias son menores a 100 GHz, probablemente están en GHz
-            spectrum_data[:, 0] = spectrum_data[:, 0] * 1e9  # Convertir GHz to Hz
+        # Adjust frequency if in GHz (convert to Hz)
+        if np.max(spectrum_data[:, 0]) < 1e11:  # If frequencies are less than 100 GHz, probably in GHz
+            spectrum_data[:, 0] = spectrum_data[:, 0] * 1e9  # Convert GHz to Hz
             st.info(f"Converted frequencies from GHz to Hz for {file.name}")
 
         interpolator = interp1d(spectrum_data[:, 0], spectrum_data[:, 1],
                                 kind='linear', bounds_error=False, fill_value=0.0)
         interpolated = interpolator(reference_frequencies)
 
-        # Extraer parámetros con valores por defecto si faltan
+        # Extract parameters with default values if missing
         params = [
             param_dict.get('logn', np.nan),
             param_dict.get('tex', np.nan),
@@ -189,11 +189,11 @@ def process_uploaded_spectrum(file, reference_frequencies):
         return None, None, None, None, None
 
 def find_knn_neighbors(training_embeddings, new_embeddings, k=5):
-    """Encuentra los k vecinos más cercanos usando KNN en 3D"""
+    """Find k nearest neighbors using KNN in 3D"""
     if len(training_embeddings) == 0 or len(new_embeddings) == 0:
         return []
     
-    # Asegurar que k no sea mayor que el número de puntos de entrenamiento
+    # Ensure k is not greater than the number of training points
     k = min(k, len(training_embeddings))
     
     knn = NearestNeighbors(n_neighbors=k, metric='euclidean')
@@ -202,7 +202,7 @@ def find_knn_neighbors(training_embeddings, new_embeddings, k=5):
     all_neighbor_indices = []
     for new_embedding in new_embeddings:
         distances, indices = knn.kneighbors([new_embedding])
-        # Verificar que los índices estén dentro del rango válido
+        # Verify indices are within valid range
         valid_indices = [idx for idx in indices[0] if idx < len(training_embeddings)]
         all_neighbor_indices.append(valid_indices)
     
