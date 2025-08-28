@@ -13,6 +13,7 @@ from scipy.interpolate import interp1d
 from sklearn.neighbors import NearestNeighbors
 from io import BytesIO
 import base64
+import umap
 
 # Set page configuration
 st.set_page_config(
@@ -57,9 +58,17 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 def load_model(model_file):
-    """Load the trained model from a pickle file"""
+    """Load the trained model from a pickle file with error handling"""
     try:
         model = pickle.load(model_file)
+        
+        # Check if the model has all required components
+        required_keys = ['scaler', 'pca', 'umap', 'reference_frequencies', 'embedding', 'y', 'formulas']
+        for key in required_keys:
+            if key not in model:
+                st.error(f"Model is missing required key: {key}")
+                return None
+                
         return model
     except Exception as e:
         st.error(f"Error loading model: {str(e)}")
@@ -188,6 +197,25 @@ def process_uploaded_spectrum(file, reference_frequencies):
         st.error(f"Error processing spectrum file: {str(e)}")
         return None, None, None, None, None
 
+def safe_umap_transform(umap_model, X_pca):
+    """Safely transform data using UMAP with error handling"""
+    try:
+        return umap_model.transform(X_pca)
+    except Exception as e:
+        st.error(f"UMAP transformation failed: {str(e)}")
+        st.warning("Using alternative dimension reduction approach")
+        
+        # Fallback: Use PCA components directly if UMAP fails
+        if X_pca.shape[1] > 3:
+            return X_pca[:, :3]  # Use first 3 PCA components
+        elif X_pca.shape[1] == 3:
+            return X_pca
+        else:
+            # Pad with zeros if fewer than 3 dimensions
+            result = np.zeros((X_pca.shape[0], 3))
+            result[:, :X_pca.shape[1]] = X_pca
+            return result
+
 def find_knn_neighbors(training_embeddings, new_embeddings, k=5):
     """Encuentra los k vecinos más cercanos usando KNN en 3D"""
     if len(training_embeddings) == 0 or len(new_embeddings) == 0:
@@ -196,17 +224,21 @@ def find_knn_neighbors(training_embeddings, new_embeddings, k=5):
     # Asegurar que k no sea mayor que el número de puntos de entrenamiento
     k = min(k, len(training_embeddings))
     
-    knn = NearestNeighbors(n_neighbors=k, metric='euclidean')
-    knn.fit(training_embeddings)
-    
-    all_neighbor_indices = []
-    for new_embedding in new_embeddings:
-        distances, indices = knn.kneighbors([new_embedding])
-        # Verificar que los índices estén dentro del rango válido
-        valid_indices = [idx for idx in indices[0] if idx < len(training_embeddings)]
-        all_neighbor_indices.append(valid_indices)
-    
-    return all_neighbor_indices
+    try:
+        knn = NearestNeighbors(n_neighbors=k, metric='euclidean')
+        knn.fit(training_embeddings)
+        
+        all_neighbor_indices = []
+        for new_embedding in new_embeddings:
+            distances, indices = knn.kneighbors([new_embedding])
+            # Verificar que los índices estén dentro del rango válido
+            valid_indices = [idx for idx in indices[0] if idx < len(training_embeddings)]
+            all_neighbor_indices.append(valid_indices)
+        
+        return all_neighbor_indices
+    except Exception as e:
+        st.error(f"KNN search failed: {str(e)}")
+        return []
 
 def create_3d_scatter(embeddings, color_values, title, color_label, color_scale='viridis', 
                       marker_size=5, selected_indices=None, selected_color='red', selected_size=10):
@@ -240,7 +272,6 @@ def create_3d_scatter(embeddings, color_values, title, color_label, color_scale=
     # Highlight selected points if provided
     if selected_indices is not None and len(selected_indices) > 0:
         selected_embeddings = embeddings[selected_indices]
-        selected_values = color_values[selected_indices] if hasattr(color_values, '__len__') and len(color_values) == len(embeddings) else color_values
         
         fig.add_trace(go.Scatter3d(
             x=selected_embeddings[:, 0],
@@ -299,7 +330,6 @@ def create_2d_scatter(embeddings, color_values, title, color_label, color_scale=
     # Highlight selected points if provided
     if selected_indices is not None and len(selected_indices) > 0:
         selected_embeddings = embeddings[selected_indices]
-        selected_values = color_values[selected_indices] if hasattr(color_values, '__len__') and len(color_values) == len(embeddings) else color_values
         
         fig.add_trace(go.Scatter(
             x=selected_embeddings[:, 0],
@@ -400,7 +430,9 @@ def main():
                             
                             X_scaled = scaler.transform([interpolated])
                             X_pca = pca.transform(X_scaled)
-                            X_umap = umap_model.transform(X_pca)
+                            
+                            # Use safe UMAP transformation
+                            X_umap = safe_umap_transform(umap_model, X_pca)
                             
                             new_spectra_data.append(interpolated)
                             new_formulas.append(formula)
@@ -450,7 +482,13 @@ def main():
                             else:
                                 param_idx = param_options.index(color_param)
                                 if param_idx < 4:  # It's a parameter
-                                    color_values = np.concatenate([model['y'][:, param_idx], new_params[:, param_idx]])
+                                    # Handle case where training data might have different shape
+                                    if len(model['y'].shape) > 1:
+                                        train_params = model['y'][:, param_idx]
+                                    else:
+                                        train_params = np.array([model['y'][param_idx]])
+                                    
+                                    color_values = np.concatenate([train_params, new_params[:, param_idx]])
                                     color_label = param_options[param_idx]
                                     color_scale = 'plasma'
                             
@@ -502,7 +540,13 @@ def main():
                             else:
                                 param_idx = param_options.index(color_param_2d)
                                 if param_idx < 4:  # It's a parameter
-                                    color_values_2d = np.concatenate([model['y'][:, param_idx], new_params[:, param_idx]])
+                                    # Handle case where training data might have different shape
+                                    if len(model['y'].shape) > 1:
+                                        train_params = model['y'][:, param_idx]
+                                    else:
+                                        train_params = np.array([model['y'][param_idx]])
+                                    
+                                    color_values_2d = np.concatenate([train_params, new_params[:, param_idx]])
                                     color_label_2d = param_options[param_idx]
                                     color_scale_2d = 'plasma'
                             
