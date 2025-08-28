@@ -43,90 +43,128 @@ def extract_molecule_formula(header):
         return formula
     return "Unknown"
 
-# Función para cargar e interpolar espectros
+# Función mejorada para cargar e interpolar espectros
 def load_and_interpolate_spectrum(filepath, reference_frequencies):
-    with open(filepath, 'r') as f:
-        lines = f.readlines()
+    try:
+        with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+            lines = f.readlines()
 
-    first_line = lines[0].strip()
-    second_line = lines[1].strip() if len(lines) > 1 else ""
-    
-    formula = "Unknown"
-    param_dict = {}
-    data_start_line = 0
-    
-    if first_line.startswith('//') and 'molecules=' in first_line:
-        header = first_line[2:].strip()
-        formula = extract_molecule_formula(header)
+        # Si el archivo está vacío
+        if not lines:
+            raise ValueError("Archivo vacío")
+
+        first_line = lines[0].strip()
         
-        for part in header.split():
-            if '=' in part:
-                try:
-                    key, value = part.split('=')
-                    key = key.strip()
-                    value = value.strip("'")
-                    if key in ['molecules', 'sourcesize']:
-                        continue
-                    try:
-                        param_dict[key] = float(value)
-                    except ValueError:
-                        param_dict[key] = value
-                except:
-                    continue
-        data_start_line = 1
-    
-    elif first_line.startswith('!') or first_line.startswith('#'):
-        if 'molecules=' in first_line:
-            formula = extract_molecule_formula(first_line)
-        data_start_line = 1
-    
-    else:
+        formula = "Unknown"
+        param_dict = {}
         data_start_line = 0
-        formula = os.path.basename(filepath).split('.')[0]
-
-    spectrum_data = []
-    for line in lines[data_start_line:]:
-        line = line.strip()
-        if not line or line.startswith('!') or line.startswith('#'):
-            continue
+        spectrum_data = []
+        
+        # Intentar diferentes formatos de archivo
+        # Formato 1: con header de molécula y parámetros
+        if first_line.startswith('//') and 'molecules=' in first_line:
+            header = first_line[2:].strip()
+            formula = extract_molecule_formula(header)
             
-        try:
-            parts = line.split()
-            if len(parts) >= 2:
-                try:
-                    freq = float(parts[0])
-                    intensity = float(parts[1])
-                except ValueError:
-                    freq_str = parts[0].replace('D', 'E').replace('d', 'E')
-                    intensity_str = parts[1].replace('D', 'E').replace('d', 'E')
-                    freq = float(freq_str)
-                    intensity = float(intensity_str)
+            for part in header.split():
+                if '=' in part:
+                    try:
+                        key, value = part.split('=')
+                        key = key.strip()
+                        value = value.strip("'")
+                        if key in ['molecules', 'sourcesize']:
+                            continue
+                        try:
+                            param_dict[key] = float(value)
+                        except ValueError:
+                            param_dict[key] = value
+                    except:
+                        continue
+            data_start_line = 1
+        
+        # Formato 2: con header de columnas
+        elif first_line.startswith('!') or first_line.startswith('#'):
+            if 'molecules=' in first_line:
+                formula = extract_molecule_formula(first_line)
+            data_start_line = 1
+        
+        # Formato 3: sin header, solo datos
+        else:
+            data_start_line = 0
+            # Intentar extraer fórmula del nombre del archivo
+            filename = os.path.basename(filepath)
+            if 'C2H5OH' in filename:
+                formula = 'C2H5OH'
+            elif 'CH3COCH3' in filename:
+                formula = 'CH3COCH3'
+            else:
+                formula = filename.split('.')[0]
+
+        # Procesar líneas de datos
+        for line_num, line in enumerate(lines[data_start_line:], data_start_line + 1):
+            line = line.strip()
+            
+            # Saltar líneas de comentario o vacías
+            if not line or line.startswith('!') or line.startswith('#') or line.startswith('//'):
+                continue
+                
+            # Limpiar la línea de caracteres no deseados
+            line = re.sub(r'[^\d\.EeDd\-\+\s]', '', line)
+            
+            try:
+                parts = line.split()
+                if len(parts) < 2:
+                    continue
+                    
+                # Manejar diferentes formatos numéricos
+                freq_str = parts[0].replace('D', 'E').replace('d', 'E')
+                intensity_str = parts[1].replace('D', 'E').replace('d', 'E')
+                
+                freq = float(freq_str)
+                intensity = float(intensity_str)
                 
                 if np.isfinite(freq) and np.isfinite(intensity):
                     spectrum_data.append([freq, intensity])
-        except Exception as e:
-            continue
+                    
+            except Exception as e:
+                # Si falla el parsing, continuar con la siguiente línea
+                continue
 
-    if not spectrum_data:
-        raise ValueError("No valid data points found in spectrum file")
+        if not spectrum_data:
+            raise ValueError("No se encontraron datos válidos en el espectro")
 
-    spectrum_data = np.array(spectrum_data)
+        spectrum_data = np.array(spectrum_data)
 
-    if np.max(spectrum_data[:, 0]) < 1e11:
-        spectrum_data[:, 0] = spectrum_data[:, 0] * 1e9
+        # Verificar y ajustar unidades de frecuencia
+        if len(spectrum_data) > 0:
+            max_freq = np.max(spectrum_data[:, 0])
+            if max_freq < 1e11:  # Probablemente en GHz
+                spectrum_data[:, 0] = spectrum_data[:, 0] * 1e9  # Convertir a Hz
 
-    interpolator = interp1d(spectrum_data[:, 0], spectrum_data[:, 1],
-                            kind='linear', bounds_error=False, fill_value=0.0)
-    interpolated = interpolator(reference_frequencies)
+        # Interpolar a las frecuencias de referencia
+        if len(spectrum_data) > 1:
+            # Ordenar por frecuencia
+            spectrum_data = spectrum_data[spectrum_data[:, 0].argsort()]
+            
+            # Crear interpolador
+            interpolator = interp1d(spectrum_data[:, 0], spectrum_data[:, 1],
+                                  kind='linear', bounds_error=False, fill_value=0.0)
+            interpolated = interpolator(reference_frequencies)
+        else:
+            interpolated = np.zeros_like(reference_frequencies)
 
-    params = [
-        param_dict.get('logn', np.nan),
-        param_dict.get('tex', np.nan),
-        param_dict.get('velo', np.nan),
-        param_dict.get('fwhm', np.nan)
-    ]
+        # Extraer parámetros con valores por defecto si faltan
+        params = [
+            param_dict.get('logn', np.nan),
+            param_dict.get('tex', np.nan),
+            param_dict.get('velo', np.nan),
+            param_dict.get('fwhm', np.nan)
+        ]
 
-    return spectrum_data, interpolated, formula, params, os.path.basename(filepath)
+        return spectrum_data, interpolated, formula, params, os.path.basename(filepath)
+        
+    except Exception as e:
+        raise ValueError(f"Error procesando archivo: {str(e)}")
 
 # Función para encontrar vecinos KNN
 def find_knn_neighbors(training_embeddings, new_embeddings, k=5):
@@ -316,6 +354,32 @@ def create_data_table(data, title):
     st.subheader(title)
     st.dataframe(df, use_container_width=True)
 
+# Función para mostrar información de depuración de archivos
+def debug_file_content(filepath):
+    try:
+        with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+            content = f.read()
+        
+        st.sidebar.subheader("Depuración de archivo")
+        st.sidebar.text_area("Contenido del archivo (primeras 20 líneas)", 
+                           "\n".join(content.split('\n')[:20]), 
+                           height=200)
+        
+        # Analizar estructura
+        lines = content.split('\n')
+        st.sidebar.write(f"Total de líneas: {len(lines)}")
+        
+        data_lines = [line for line in lines if line.strip() and not line.strip().startswith(('!', '#', '//'))]
+        st.sidebar.write(f"Líneas de datos: {len(data_lines)}")
+        
+        if data_lines:
+            st.sidebar.write("Primeras líneas de datos:")
+            for i, line in enumerate(data_lines[:3]):
+                st.sidebar.write(f"{i+1}: {line}")
+                
+    except Exception as e:
+        st.sidebar.error(f"Error leyendo archivo: {str(e)}")
+
 # Función principal de la aplicación
 def main():
     st.title("🧪 Visualización 3D de Espectros Moleculares")
@@ -369,6 +433,7 @@ def main():
                 new_params = []
                 new_filenames = []
                 new_embeddings = []
+                processing_errors = []
                 
                 for file in new_spectra_files:
                     filepath = os.path.join("temp_spectra", file.name)
@@ -387,7 +452,13 @@ def main():
                         new_embeddings.append(X_umap[0])
                         
                     except Exception as e:
-                        st.sidebar.error(f"Error procesando {file.name}: {str(e)}")
+                        error_msg = f"Error procesando {file.name}: {str(e)}"
+                        st.sidebar.error(error_msg)
+                        processing_errors.append(error_msg)
+                        
+                        # Opción para depurar el archivo problemático
+                        if st.sidebar.checkbox(f"Depurar {file.name}"):
+                            debug_file_content(filepath)
                 
                 if new_embeddings:
                     new_embeddings = np.array(new_embeddings)
@@ -395,6 +466,9 @@ def main():
                     new_formulas = np.array(new_formulas)
                     
                     st.sidebar.success(f"{len(new_embeddings)} espectros procesados correctamente")
+                    
+                    if processing_errors:
+                        st.sidebar.warning(f"{len(processing_errors)} archivos con errores")
                     
                     # Encontrar vecinos KNN
                     knn_neighbors = st.sidebar.slider("Número de vecinos KNN", 1, 20, 5)
