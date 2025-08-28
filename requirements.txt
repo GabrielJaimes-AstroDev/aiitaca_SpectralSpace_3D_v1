@@ -6,4 +6,7 @@ matplotlib>=3.7
 tqdm>=4.65
 scipy>=1.10
 umap-learn>=0.5
+plotly>=5.0.0
+
+
 
