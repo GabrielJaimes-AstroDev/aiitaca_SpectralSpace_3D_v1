@@ -16,7 +16,7 @@ import base64
 
 # Set page configuration
 st.set_page_config(
-    page_title="3D Molecular Spectrum Analyzer",
+    page_title="3D Spectral Space Analyzerr",
     page_icon="🧪",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -661,4 +661,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
