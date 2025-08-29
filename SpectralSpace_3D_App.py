@@ -347,8 +347,31 @@ def create_spectrum_plot(frequencies, intensities, title):
     return fig
 
 def main():
+    
+     # Add the header image and title
+    st.image("NGC6523_BVO_2.jpg", use_column_width=True)
+    
+    col1, col2 = st.columns([1, 3])
+    with col1:
+        st.empty()
+        
+    with col2:
+        st.markdown('<p class="main-title">AI-ITACA | Artificial Intelligence Integral Tool for AstroChemical Analysis</p>', unsafe_allow_html=True)
+    
+    st.markdown("""
+    A remarkable upsurge in the complexity of molecules identified in the interstellar medium (ISM) is currently occurring, with over 80 new species discovered in the last three years. A number of them have been emphasized by prebiotic experiments as vital molecular building blocks of life. Since our Solar System was formed from a molecular cloud in the ISM, it prompts the query as to whether the rich interstellar chemical reservoir could have played a role in the emergence of life. The improved sensitivities of state-of-the-art astronomical facilities, such as the Atacama Large Millimeter/submillimeter Array (ALMA) and the James Webb Space Telescope (JWST), are revolutionizing the discovery of new molecules in space. However, we are still just scraping the tip of the iceberg. We are far from knowing the complete catalogue of molecules that astrochemistry can offer, as well as the complexity they can reach.<br><br>
+    <strong>Artificial Intelligence Integral Tool for AstroChemical Analysis (AI-ITACA)</strong>, proposes to combine complementary machine learning (ML) techniques to address all the challenges that astrochemistry is currently facing. AI-ITACA will significantly contribute to the development of new AI-based cutting-edge analysis software that will allow us to make a crucial leap in the characterization of the level of chemical complexity in the ISM, and in our understanding of the contribution that interstellar chemistry might have in the origin of life.
+    """, unsafe_allow_html=True)
+    
+    st.markdown("""
+    <div class="info-box">
+    <h4>About GUAPOS</h4>
+    <p>The G31.41+0.31 Unbiased ALMA sPectral Observational Survey (GUAPOS) project targets the hot molecular core (HMC) G31.41+0.31 (G31) to reveal the complex chemistry of one of the most chemically rich high-mass star-forming regions outside the Galactic center (GC).</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
     # Header
-    st.markdown('<h1 class="main-header">🧪 3D Molecular Spectrum Analyzer</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="main-header">🧪 3D Spectral Space Analyzer</h1>', unsafe_allow_html=True)
     
     # Sidebar
     st.sidebar.title("Configuration")
@@ -638,3 +661,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
