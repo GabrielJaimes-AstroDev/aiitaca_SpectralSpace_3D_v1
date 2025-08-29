@@ -47,6 +47,13 @@ st.markdown("""
         background-color: #1E88E5;
         color: white;
     }
+    .main-title {
+        font-size: 1.8rem;
+        color: #1f77b4;
+        text-align: center;
+        margin-bottom: 1rem;
+        font-weight: bold;
+    }
     .plot-container {
         background-color: #FAFAFA;
         padding: 1.5rem;
@@ -661,5 +668,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
