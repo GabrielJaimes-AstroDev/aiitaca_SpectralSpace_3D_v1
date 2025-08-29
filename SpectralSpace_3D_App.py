@@ -346,19 +346,6 @@ def create_3d_scatter(embeddings, color_values, title, color_label, color_scale=
                     showlegend=True
                 ))
     else:
-        # Determine color scale based on parameter type
-        # Use viridis specifically for logn, other scales for other parameters
-        if color_label == 'logn':
-            param_color_scale = 'viridis'
-        elif color_label == 'tex':
-            param_color_scale = 'plasma'
-        elif color_label == 'velo':
-            param_color_scale = 'inferno'
-        elif color_label == 'fwhm':
-            param_color_scale = 'magma'
-        else:
-            param_color_scale = color_scale  # Use default if not specified
-        
         # Create main scatter plot for non-formula coloring
         fig.add_trace(go.Scatter3d(
             x=embeddings[:, 0],
@@ -368,7 +355,7 @@ def create_3d_scatter(embeddings, color_values, title, color_label, color_scale=
             marker=dict(
                 size=marker_size,
                 color=color_values,
-                colorscale=param_color_scale,
+                colorscale=color_scale,
                 opacity=0.7,
                 colorbar=dict(
                     title=color_label,
@@ -816,3 +803,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
