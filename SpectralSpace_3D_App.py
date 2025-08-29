@@ -298,7 +298,7 @@ def analyze_spectra(model, spectra_files, knn_neighbors):
 
 def create_3d_scatter(embeddings, color_values, title, color_label, color_scale='viridis', 
                       marker_size=5, selected_indices=None, selected_color='red', selected_size=10,
-                      formulas=None, params=None, is_training=True, show_legend=False, legend_dict=None):
+                      formulas=None, params=None, is_training=True):
     """Create an interactive 3D scatter plot with enhanced hover information"""
     fig = go.Figure()
     
@@ -313,10 +313,13 @@ def create_3d_scatter(embeddings, color_values, title, color_label, color_scale=
             text = f"Index: {i}"
         hover_text.append(text)
     
-    # Create main scatter plot
-    if show_legend and legend_dict is not None:
-        # Create separate traces for each formula to show in legend
-        unique_formulas = list(legend_dict.keys())
+    # Special handling for formula coloring - each formula gets a different color
+    if color_label == "Formula" and formulas is not None:
+        # Create a unique color for each formula
+        unique_formulas = list(set(formulas))
+        formula_to_color = {formula: i for i, formula in enumerate(unique_formulas)}
+        
+        # Create a separate trace for each formula to show in legend
         for formula in unique_formulas:
             indices = [i for i, f in enumerate(formulas) if f == formula]
             if indices:
@@ -327,7 +330,7 @@ def create_3d_scatter(embeddings, color_values, title, color_label, color_scale=
                     mode='markers',
                     marker=dict(
                         size=marker_size,
-                        color=[color_values[i] for i in indices],
+                        color=[formula_to_color[formula] for _ in indices],
                         colorscale=color_scale,
                         opacity=0.7,
                         line=dict(width=0)
@@ -343,7 +346,20 @@ def create_3d_scatter(embeddings, color_values, title, color_label, color_scale=
                     showlegend=True
                 ))
     else:
-        # Create single trace without legend
+        # Determine color scale based on parameter type
+        # Use viridis specifically for logn, other scales for other parameters
+        if color_label == 'logn':
+            param_color_scale = 'viridis'
+        elif color_label == 'tex':
+            param_color_scale = 'plasma'
+        elif color_label == 'velo':
+            param_color_scale = 'inferno'
+        elif color_label == 'fwhm':
+            param_color_scale = 'magma'
+        else:
+            param_color_scale = color_scale  # Use default if not specified
+        
+        # Create main scatter plot for non-formula coloring
         fig.add_trace(go.Scatter3d(
             x=embeddings[:, 0],
             y=embeddings[:, 1],
@@ -352,7 +368,7 @@ def create_3d_scatter(embeddings, color_values, title, color_label, color_scale=
             marker=dict(
                 size=marker_size,
                 color=color_values,
-                colorscale=color_scale,
+                colorscale=param_color_scale,
                 opacity=0.7,
                 colorbar=dict(
                     title=color_label,
@@ -376,7 +392,7 @@ def create_3d_scatter(embeddings, color_values, title, color_label, color_scale=
     # Highlight selected points if provided
     if selected_indices is not None and len(selected_indices) > 0:
         selected_embeddings = embeddings[selected_indices]
-        selected_values = color_values[selected_indices] if hasattr(color_values, '__len__') and len(color_values) == len(embeddings) else color_values
+        selected_formulas = [formulas[i] for i in selected_indices] if formulas is not None else None
         
         fig.add_trace(go.Scatter3d(
             x=selected_embeddings[:, 0],
@@ -389,6 +405,13 @@ def create_3d_scatter(embeddings, color_values, title, color_label, color_scale=
                 opacity=1.0,
                 line=dict(width=2, color='black')
             ),
+            text=[hover_text[i] for i in selected_indices] if hover_text else None,
+            hovertemplate=
+            '<b>X</b>: %{x}<br>' +
+            '<b>Y</b>: %{y}<br>' +
+            '<b>Z</b>: %{z}<br>' +
+            '%{text}' +
+            '<extra></extra>',
             name='Selected points',
             showlegend=True
         ))
@@ -793,4 +816,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
