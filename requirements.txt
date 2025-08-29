@@ -1,24 +1,14 @@
-# Streamlit app
-streamlit>=1.30.0
-
-# Ciencia de datos y ML
+streamlit==1.36.0
 numpy==1.26.4
 pandas==2.3.1
+numba==0.60.0
+scikit-learn==1.6.1
+llvmlite==0.43.0
 scipy==1.13.1
-scikit-learn==1.7.1
-matplotlib==3.10.5
-seaborn==0.13.2
-tqdm>=4.65
-plotly>=5.0.0
-
-# UMAP y Numba (evitar errores en Python 3.10)
+matplotlib==3.9.4
+plotly==5.24.1
 umap-learn==0.5.9.post2
-numba==0.61.2
-llvmlite==0.44.0
-pynndescent==0.5.13
-
-mol2vec==0.2.2
-
-
-
+tqdm==4.67.1
+Pillow==10.4.0
+joblib==1.4.2
 
