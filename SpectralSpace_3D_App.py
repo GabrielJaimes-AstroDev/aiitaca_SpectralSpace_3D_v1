@@ -346,18 +346,19 @@ def create_3d_scatter(embeddings, color_values, title, color_label, color_scale=
                     showlegend=True
                 ))
     else:
-        # Determine color scale based on parameter type
-        # Use viridis specifically for logn, other scales for other parameters
-        if color_label == 'logn':
-            param_color_scale = 'viridis'
-        elif color_label == 'tex':
-            param_color_scale = 'plasma'
-        elif color_label == 'velo':
-            param_color_scale = 'inferno'
-        elif color_label == 'fwhm':
-            param_color_scale = 'magma'
-        else:
-            param_color_scale = color_scale  # Use default if not specified
+        # Determine color scale based on parameter type with safe handling
+        param_color_scale = color_scale  # Default to the provided color_scale
+        
+        # Only try to set specific color scales if color_label is a string
+        if isinstance(color_label, str):
+            if color_label.lower() == 'logn':
+                param_color_scale = 'viridis'
+            elif color_label.lower() == 'tex':
+                param_color_scale = 'plasma'
+            elif color_label.lower() == 'velo':
+                param_color_scale = 'inferno'
+            elif color_label.lower() == 'fwhm':
+                param_color_scale = 'magma'
         
         # Create main scatter plot for non-formula coloring
         fig.add_trace(go.Scatter3d(
@@ -392,7 +393,6 @@ def create_3d_scatter(embeddings, color_values, title, color_label, color_scale=
     # Highlight selected points if provided
     if selected_indices is not None and len(selected_indices) > 0:
         selected_embeddings = embeddings[selected_indices]
-        selected_formulas = [formulas[i] for i in selected_indices] if formulas is not None else None
         
         fig.add_trace(go.Scatter3d(
             x=selected_embeddings[:, 0],
@@ -816,5 +816,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
