@@ -314,8 +314,40 @@ def create_3d_scatter(embeddings, color_values, title, color_label, color_scale=
         hover_text.append(text)
     
     # Create main scatter plot
-    if show_legend and legend_dict is not None:
-        # Create separate traces for each formula to show in legend
+    if show_legend and legend_dict is not None and color_param == 'formula':
+        # Create separate traces for each formula to show in legend with unique colors
+        unique_formulas = list(legend_dict.keys())
+        
+        # Generate a distinct color for each formula
+        colors = px.colors.qualitative.Set1 + px.colors.qualitative.Set2 + px.colors.qualitative.Set3
+        formula_colors = {formula: colors[i % len(colors)] for i, formula in enumerate(unique_formulas)}
+        
+        for formula in unique_formulas:
+            indices = [i for i, f in enumerate(formulas) if f == formula]
+            if indices:
+                fig.add_trace(go.Scatter3d(
+                    x=embeddings[indices, 0],
+                    y=embeddings[indices, 1],
+                    z=embeddings[indices, 2],
+                    mode='markers',
+                    marker=dict(
+                        size=marker_size,
+                        color=formula_colors[formula],  # Use unique color for each formula
+                        opacity=0.7,
+                        line=dict(width=0)
+                    ),
+                    text=[hover_text[i] for i in indices],
+                    hovertemplate=
+                    '<b>X</b>: %{x}<br>' +
+                    '<b>Y</b>: %{y}<br>' +
+                    '<b>Z</b>: %{z}<br>' +
+                    '%{text}' +
+                    '<extra></extra>',
+                    name=formula,
+                    showlegend=True
+                ))
+    elif show_legend and legend_dict is not None:
+        # Original behavior for non-formula coloring
         unique_formulas = list(legend_dict.keys())
         for formula in unique_formulas:
             indices = [i for i, f in enumerate(formulas) if f == formula]
@@ -793,4 +825,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
