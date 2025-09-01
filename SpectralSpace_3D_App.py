@@ -13,6 +13,7 @@ from scipy.interpolate import interp1d
 from sklearn.neighbors import NearestNeighbors
 from io import BytesIO
 import base64
+import plotly.express as px
 
 # Set page configuration
 st.set_page_config(
@@ -825,5 +826,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
