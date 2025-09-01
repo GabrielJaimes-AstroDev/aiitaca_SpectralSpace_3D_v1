@@ -643,7 +643,7 @@ def main():
                 new_data_params = results['avg_new_params'][:, param_idx]
                 color_values = np.concatenate([training_params, new_data_params])
                 color_label = param_options[param_idx]
-                color_scale = 'plasma'
+                color_scale = 'viridis'
                 show_legend = False
                 legend_dict = None
         
@@ -717,7 +717,7 @@ def main():
             if param_idx < 4:  # It's a parameter
                 color_values_2d = np.concatenate([model['y'][:, param_idx], results['avg_new_params'][:, param_idx]])
                 color_label_2d = param_options[param_idx]
-                color_scale_2d = 'plasma'
+                color_scale_2d = 'viridis'
         
         # Create the plot
         fig_2d = create_2d_scatter(
@@ -830,6 +830,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
