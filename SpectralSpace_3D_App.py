@@ -654,7 +654,8 @@ def main():
         all_formulas = np.concatenate([model['formulas'], results['new_formulas']])
         all_params = np.vstack([model['y'], results['avg_new_params']])
         
-       fig_3d = create_3d_scatter(
+       # Y cámbiala por:
+        fig_3d = create_3d_scatter(
             combined_embeddings, 
             color_values, 
             "3D UMAP Projection (Training + New Spectra)", 
@@ -829,6 +830,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
