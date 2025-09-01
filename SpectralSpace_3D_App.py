@@ -299,7 +299,8 @@ def analyze_spectra(model, spectra_files, knn_neighbors):
 
 def create_3d_scatter(embeddings, color_values, title, color_label, color_scale='viridis', 
                       marker_size=5, selected_indices=None, selected_color='red', selected_size=10,
-                      formulas=None, params=None, is_training=True, show_legend=False, legend_dict=None):
+                      formulas=None, params=None, is_training=True, show_legend=False, legend_dict=None,
+                      color_param=None):  # Añadir color_param como parámetro
     """Create an interactive 3D scatter plot with enhanced hover information"""
     fig = go.Figure()
     
@@ -320,6 +321,7 @@ def create_3d_scatter(embeddings, color_values, title, color_label, color_scale=
         unique_formulas = list(legend_dict.keys())
         
         # Generate a distinct color for each formula
+        import plotly.express as px
         colors = px.colors.qualitative.Set1 + px.colors.qualitative.Set2 + px.colors.qualitative.Set3
         formula_colors = {formula: colors[i % len(colors)] for i, formula in enumerate(unique_formulas)}
         
@@ -826,6 +828,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
