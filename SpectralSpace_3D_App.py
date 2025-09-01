@@ -654,7 +654,7 @@ def main():
         all_formulas = np.concatenate([model['formulas'], results['new_formulas']])
         all_params = np.vstack([model['y'], results['avg_new_params']])
         
-        fig_3d = create_3d_scatter(
+       fig_3d = create_3d_scatter(
             combined_embeddings, 
             color_values, 
             "3D UMAP Projection (Training + New Spectra)", 
@@ -665,7 +665,8 @@ def main():
             params=all_params,
             is_training=True,
             show_legend=show_legend,
-            legend_dict=legend_dict
+            legend_dict=legend_dict,
+            color_param=color_param  # Añadir este parámetro
         )
         
         st.plotly_chart(fig_3d, use_container_width=True)
@@ -828,6 +829,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
