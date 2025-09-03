@@ -18,7 +18,7 @@ import plotly.express as px
 # Set page configuration
 st.set_page_config(
     page_title="C.3D Spectral Space Analyzer",
-    page_icon="🧪",
+    page_icon="🔭",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -830,6 +830,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
