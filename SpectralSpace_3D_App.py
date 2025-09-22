@@ -14,8 +14,6 @@ from sklearn.neighbors import NearestNeighbors
 from io import BytesIO
 import base64
 import plotly.express as px
-import tempfile
-from glob import glob
 
 # Set page configuration
 st.set_page_config(
@@ -73,18 +71,6 @@ if 'spectra_files' not in st.session_state:
     st.session_state.spectra_files = None
 if 'results' not in st.session_state:
     st.session_state.results = None
-if 'spectrum_file' not in st.session_state:
-    st.session_state.spectrum_file = None
-if 'filtered_spectra' not in st.session_state:
-    st.session_state.filtered_spectra = None
-if 'selected_velo' not in st.session_state:
-    st.session_state.selected_velo = None
-if 'selected_fwhm' not in st.session_state:
-    st.session_state.selected_fwhm = None
-if 'selected_sigma' not in st.session_state:
-    st.session_state.selected_sigma = None
-if 'consider_absorption' not in st.session_state:
-    st.session_state.consider_absorption = False
 
 def load_model(model_file):
     """Load the trained model from a pickle file"""
@@ -532,62 +518,6 @@ def create_spectrum_plot(frequencies, intensities, title):
     
     return fig
 
-def get_available_filter_params(filters_dir):
-    """Obtiene los parámetros disponibles de los filtros en la carpeta"""
-    velocities, fwhms, sigmas = set(), set(), set()
-    filter_files = glob(os.path.join(filters_dir, "*.txt"))
-    for filter_path in filter_files:
-        filter_name = os.path.basename(filter_path)
-        try:
-            velo, fwhm, sigma = extract_filter_params(filter_name)
-            velocities.add(velo)
-            fwhms.add(fwhm)
-            sigmas.add(sigma)
-        except:
-            continue
-    return sorted(list(velocities)), sorted(list(fwhms)), sorted(list(sigmas))
-
-def extract_filter_params(filter_name):
-    """Extrae parámetros de nombre de filtro, asume formato: V{velo}_F{fwhm}_S{sigma}.txt"""
-    import re
-    match = re.search(r'V([-\d\.]+)_F([-\d\.]+)_S([-\d\.]+)', filter_name)
-    if match:
-        velo = float(match.group(1))
-        fwhm = float(match.group(2))
-        sigma = float(match.group(3))
-        return velo, fwhm, sigma
-    raise ValueError("No se pudieron extraer parámetros del filtro")
-
-def apply_filter_to_spectrum(spectrum_data, filter_path, tmp_dir):
-    """Aplica el filtro al espectro (multiplica intensidades por el filtro)"""
-    try:
-        filter_data = np.loadtxt(filter_path)
-        # Interpolar filtro a las frecuencias del espectro
-        interp_filter = interp1d(filter_data[:, 0], filter_data[:, 1], bounds_error=False, fill_value=1.0)
-        filtered_intensity = spectrum_data[:, 1] * interp_filter(spectrum_data[:, 0])
-        filtered_spectrum = np.column_stack([spectrum_data[:, 0], filtered_intensity])
-        return filtered_spectrum
-    except Exception as e:
-        return None
-
-def generate_filtered_spectra(spectrum_data, filters_dir, selected_velo, selected_fwhm, selected_sigma, allow_negative=True):
-    """Genera espectros filtrados según parámetros seleccionados y opción de absorción"""
-    filter_files = glob(os.path.join(filters_dir, "*.txt"))
-    filtered_spectra = []
-    for filter_path in filter_files:
-        filter_name = os.path.basename(filter_path)
-        try:
-            velo, fwhm, sigma = extract_filter_params(filter_name)
-            if (velo == selected_velo and fwhm == selected_fwhm and sigma == selected_sigma):
-                filtered_spectrum = apply_filter_to_spectrum(spectrum_data, filter_path, tempfile.gettempdir())
-                if filtered_spectrum is not None:
-                    if not allow_negative:
-                        filtered_spectrum[:, 1] = np.where(filtered_spectrum[:, 1] < 0, 0, filtered_spectrum[:, 1])
-                    filtered_spectra.append((filter_name, filtered_spectrum))
-        except:
-            continue
-    return filtered_spectra
-
 def main():
     
      # Add the header image and title
@@ -630,82 +560,34 @@ def main():
                     if st.session_state.model is not None:
                         st.success("Model loaded successfully!")
         
-        # Spectra upload (solo uno)
-        st.subheader("2. Upload Spectrum")
-        spectrum_file = st.file_uploader(
-            "Upload spectrum file (TXT, FITS, SPEC, DAT)", 
-            type=['txt', 'fits', 'spec', 'dat']
-        )
-        if spectrum_file:
-            st.session_state.spectrum_file = spectrum_file
+        # Spectra upload
+        st.subheader("2. Upload Spectra")
+        spectra_files = st.file_uploader("Upload spectrum files (TXT)", type=['txt'], accept_multiple_files=True)
         
-        # Filter parameters
-        st.subheader("3. Filter Parameters")
-        filters_dir = "1.Filters"
-        if os.path.exists(filters_dir):
-            velocities, fwhms, sigmas = get_available_filter_params(filters_dir)
-            if velocities and fwhms and sigmas:
-                selected_velo = st.selectbox("Velocity", velocities, index=0)
-                selected_fwhm = st.selectbox("FWHM", fwhms, index=0)
-                selected_sigma = st.selectbox("Sigma", sigmas, index=0)
-                st.session_state.selected_velo = selected_velo
-                st.session_state.selected_fwhm = selected_fwhm
-                st.session_state.selected_sigma = selected_sigma
-                consider_absorption = st.checkbox("Consider absorption lines (allow negative values)", value=False)
-                st.session_state.consider_absorption = consider_absorption
-            else:
-                st.error("No valid filters found in the '1.Filters' directory")
-        else:
-            st.error("Filters directory '1.Filters' not found")
+        if spectra_files:
+            st.session_state.spectra_files = spectra_files
         
         # Analysis parameters
-        st.subheader("4. Analysis Parameters")
+        st.subheader("3. Analysis Parameters")
         knn_neighbors = st.slider("Number of KNN neighbors", min_value=1, max_value=20, value=5)
         
-        if st.button("Generate Filtered Spectra and Analyze") and st.session_state.model is not None and hasattr(st.session_state, 'spectrum_file'):
-            with st.spinner("Generating filtered spectra and analyzing..."):
+        if st.button("Analyze Spectra") and st.session_state.model is not None and st.session_state.spectra_files:
+            with st.spinner("Analyzing spectra..."):
                 try:
-                    spectrum_content = st.session_state.spectrum_file.getvalue()
-                    spectrum_filename = st.session_state.spectrum_file.name
-                    # Leer datos del espectro
-                    lines = spectrum_content.decode('utf-8').splitlines()
-                    data_lines = [line for line in lines if not (line.strip().startswith('!') or line.strip().startswith('//')) and line.strip()]
-                    spectrum_data = np.loadtxt(data_lines)
-                    # Generar espectros filtrados
-                    filtered_spectra = generate_filtered_spectra(
-                        spectrum_data, 
-                        filters_dir, 
-                        st.session_state.selected_velo, 
-                        st.session_state.selected_fwhm, 
-                        st.session_state.selected_sigma,
-                        allow_negative=st.session_state.consider_absorption
-                    )
-                    if not filtered_spectra:
-                        st.error("No filters found matching the selected parameters")
-                        return
-                    st.session_state.filtered_spectra = filtered_spectra
-                    # Convertir espectros filtrados a objetos tipo archivo para analizar
-                    spectra_files = []
-                    for filter_name, filtered_data in filtered_spectra:
-                        file_obj = tempfile.NamedTemporaryFile(delete=False, suffix='.txt')
-                        np.savetxt(file_obj, filtered_data, delimiter='\t', fmt=['%.10f', '%.6e'])
-                        file_obj.seek(0)
-                        file_obj.name = filter_name
-                        spectra_files.append(file_obj)
-                    # Analizar los espectros filtrados
                     model = st.session_state.model
-                    results = analyze_spectra(model, spectra_files, knn_neighbors)
+                    results = analyze_spectra(model, st.session_state.spectra_files, knn_neighbors)
                     st.session_state.results = results
-                    st.success(f"Analysis completed! Generated {len(filtered_spectra)} filtered spectra.")
+                    st.success("Analysis completed!")
                 except Exception as e:
                     st.error(f"Error during analysis: {str(e)}")
-
+    
     # Main content area
     if st.session_state.model is None:
         st.info("Please upload a model file to get started.")
         return
+    
     model = st.session_state.model
-
+    
     # Display model information
     with st.expander("Model Information", expanded=True):
         col1, col2, col3 = st.columns(3)
@@ -716,19 +598,20 @@ def main():
         with col3:
             st.metric("Variance Threshold", f"{model.get('variance_threshold', 0.99)*100:.1f}%")
     
-    if not hasattr(st.session_state, 'results') or st.session_state.results is None:
-        st.info("Upload a spectrum file, select filter parameters, and click 'Generate Filtered Spectra and Analyze' to see results.")
+    if st.session_state.results is None:
+        st.info("Upload spectrum files and click 'Analyze Spectra' to see results.")
         return
+    
     results = st.session_state.results
-
+    
     # Main content
     st.markdown('<div class="info-box">', unsafe_allow_html=True)
-    st.write(f"**Analysis Results:** {len(results['new_embeddings'])} filtered spectra processed and projected into 3D space")
+    st.write(f"**Analysis Results:** {len(results['new_embeddings'])} spectra processed and projected into 3D space")
     st.markdown('</div>', unsafe_allow_html=True)
-
-    # Tabs for visualization
-    tab1, tab2, tab3, tab4 = st.tabs(["3D Projection", "2D Projection", "Filtered Spectrum View", "KNN Analysis"])
-
+    
+    # Create tabs for different visualizations
+    tab1, tab2, tab3, tab4 = st.tabs(["3D Projection", "2D Projection", "Spectrum View", "KNN Analysis"])
+    
     with tab1:
         st.markdown('<h2 class="sub-header">3D UMAP Projection</h2>', unsafe_allow_html=True)
         
@@ -765,7 +648,7 @@ def main():
                 legend_dict = None
         
         # Create the plot
-        selected_indices = list(range(len(model['embedding'], len(combined_embeddings))))
+        selected_indices = list(range(len(model['embedding']), len(combined_embeddings)))
         
         # Prepare hover information
         all_formulas = np.concatenate([model['formulas'], results['new_formulas']])
@@ -849,39 +732,46 @@ def main():
         st.plotly_chart(fig_2d, use_container_width=True)
     
     with tab3:
-        st.markdown('<h2 class="sub-header">Filtered Spectrum Comparison</h2>', unsafe_allow_html=True)
-        # Selección de espectro filtrado generado
-        filtered_names = [fn for fn, _ in getattr(st.session_state, 'filtered_spectra', [])]
-        if filtered_names:
-            selected_idx = st.selectbox("Select filtered spectrum", range(len(filtered_names)), format_func=lambda x: filtered_names[x])
-            if selected_idx is not None:
-                col1, col2 = st.columns(2)
-                with col1:
-                    spectrum_fig = create_spectrum_plot(
-                        model['reference_frequencies'],
-                        results['new_spectra_data'][selected_idx],
-                        f"Filtered Spectrum: {filtered_names[selected_idx]}"
-                    )
-                    st.plotly_chart(spectrum_fig, use_container_width=True)
-                with col2:
-                    if results['knn_indices'] and len(results['knn_indices']) > selected_idx:
-                        neighbor_indices = results['knn_indices'][selected_idx]
-                        if neighbor_indices:
-                            st.write("**K-Nearest Neighbors:**")
-                            neighbor_data = []
-                            for idx in neighbor_indices:
-                                neighbor_data.append({
-                                    'Formula': model['formulas'][idx],
-                                    'log(n)': f"{model['y'][idx, 0]:.2f}",
-                                    'T_ex (K)': f"{model['y'][idx, 1]:.2f}",
-                                    'Velocity': f"{model['y'][idx, 2]:.2f}",
-                                    'FWHM': f"{model['y'][idx, 3]:.2f}"
-                                })
-                            neighbor_df = pd.DataFrame(neighbor_data)
-                            st.dataframe(neighbor_df, use_container_width=True)
-        else:
-            st.info("No filtered spectra available. Please run the analysis.")
-
+        st.markdown('<h2 class="sub-header">Spectrum Comparison</h2>', unsafe_allow_html=True)
+        
+        # Let user select which spectrum to view
+        spectrum_idx = st.selectbox("Select spectrum", range(len(results['new_embeddings'])), 
+                                  format_func=lambda x: results['new_filenames'][x])
+        
+        if spectrum_idx is not None:
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # Show the selected spectrum
+                spectrum_fig = create_spectrum_plot(
+                    model['reference_frequencies'],
+                    results['new_spectra_data'][spectrum_idx],
+                    f"Spectrum: {results['new_filenames'][spectrum_idx]}"
+                )
+                st.plotly_chart(spectrum_fig, use_container_width=True)
+            
+            with col2:
+                # Show KNN neighbors if available
+                if results['knn_indices'] and len(results['knn_indices']) > spectrum_idx:
+                    neighbor_indices = results['knn_indices'][spectrum_idx]
+                    
+                    if neighbor_indices:
+                        st.write("**K-Nearest Neighbors:**")
+                        
+                        # Create a DataFrame for the neighbors
+                        neighbor_data = []
+                        for idx in neighbor_indices:
+                            neighbor_data.append({
+                                'Formula': model['formulas'][idx],
+                                'log(n)': f"{model['y'][idx, 0]:.2f}",
+                                'T_ex (K)': f"{model['y'][idx, 1]:.2f}",
+                                'Velocity': f"{model['y'][idx, 2]:.2f}",
+                                'FWHM': f"{model['y'][idx, 3]:.2f}"
+                            })
+                        
+                        neighbor_df = pd.DataFrame(neighbor_data)
+                        st.dataframe(neighbor_df, use_container_width=True)
+    
     with tab4:
         st.markdown('<h2 class="sub-header">K-Nearest Neighbors Analysis</h2>', unsafe_allow_html=True)
         
