@@ -560,11 +560,11 @@ def apply_filter_to_spectrum(spectrum_file, filter_path, output_dir):
         # Read spectrum data
         original_lines = spectrum_file.getvalue().decode('utf-8').splitlines()
         header_lines = [line for line in original_lines if line.startswith('!') or line.startswith('//')]
-        header_str = ''.join(header_lines).strip()
+        header_str = '\n'.join(header_lines).strip()
         data_lines = [line for line in original_lines if not (line.startswith('!') or line.startswith('//')) and line.strip()]
         spectrum_data = np.loadtxt(data_lines)
         freq_spectrum = spectrum_data[:, 0]  # GHz or Hz
-        intensity_spectrum = spectrum_data[:, 1]  # K
+        intensity_spectrum = spectrum_data[:, 1]
 
         filter_data = np.loadtxt(filter_path, comments='/')
         freq_filter_hz = filter_data[:, 0]  # Hz
@@ -681,7 +681,7 @@ def main():
         )
         if spectrum_file:
             st.session_state.spectrum_file = spectrum_file
-
+        
         # Filter parameters
         st.subheader("3. Filter Parameters")
         filters_dir = "1.Filters"
@@ -700,11 +700,11 @@ def main():
                 st.error("No valid filters found in the '1.Filters' directory")
         else:
             st.error("Filters directory '1.Filters' not found")
-
+        
         # Analysis parameters
         st.subheader("4. Analysis Parameters")
         knn_neighbors = st.slider("Number of KNN neighbors", min_value=1, max_value=20, value=5)
-
+        
         if st.button("Generate Filtered Spectra and Analyze") and st.session_state.model is not None and hasattr(st.session_state, 'spectrum_file'):
             with st.spinner("Generating filtered spectra and analyzing..."):
                 try:
@@ -722,12 +722,13 @@ def main():
                         return
                     st.session_state.filtered_spectra = filtered_spectra
 
-                    # Abrir los archivos filtrados como file-like para analizar
+                    # Leer los espectros filtrados y pasarlos como archivos a analyze_spectra
                     spectra_files = []
                     for filter_name, output_path in filtered_spectra.items():
-                        file_obj = open(output_path, 'rb')
-                        file_obj.name = filter_name
-                        spectra_files.append(file_obj)
+                        with open(output_path, 'rb') as f:
+                            file_obj = BytesIO(f.read())
+                            file_obj.name = filter_name + ".txt"
+                            spectra_files.append(file_obj)
 
                     # Analizar los espectros filtrados
                     model = st.session_state.model
