@@ -276,8 +276,25 @@ def analyze_spectra(model, spectra_files, knn_neighbors):
         'new_embeddings': new_embeddings,
         'new_pca_components': new_pca_components,
         'knn_indices': knn_indices,
-        'avg_new_params': avg_new_params
+        'avg_new_params': avg_new_params,
+        'uncertainties_new_params': uncertainties_new_params
     }
+
+def calculate_parameter_uncertainty(model, neighbor_indices):
+    uncertainties = []
+    expected_values = []
+    for i in range(4):  # For each parameter (logn, tex, velo, fwhm)
+        param_values = model['y'][neighbor_indices, i]
+        valid_values = param_values[~np.isnan(param_values)]
+        if len(valid_values) > 0:
+            expected_value = np.mean(valid_values)
+            uncertainty = np.std(valid_values)
+        else:
+            expected_value = np.nan
+            uncertainty = np.nan
+        expected_values.append(expected_value)
+        uncertainties.append(uncertainty)
+    return expected_values, uncertainties
 
 def create_3d_scatter(embeddings, color_values, title, color_label, color_scale='viridis', 
                       marker_size=5, selected_indices=None, selected_color='red', selected_size=10,
