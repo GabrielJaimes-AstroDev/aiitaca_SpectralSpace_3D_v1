@@ -253,10 +253,13 @@ def analyze_spectra(model, spectra_files, knn_neighbors):
         if knn_indices and len(knn_indices) > i:
             neighbor_indices = knn_indices[i]
             if neighbor_indices:
-                param_values = model['y'][neighbor_indices]
-                avg_params = np.nanmean(param_values, axis=0)
-                # Si quieres la incertidumbre:
-                # uncertainties = np.nanstd(param_values, axis=0)
+                # Calculate average parameters from neighbors
+                avg_params = [
+                    np.nanmean([model['y'][idx, 0] for idx in neighbor_indices]),
+                    np.nanmean([model['y'][idx, 1] for idx in neighbor_indices]),
+                    np.nanmean([model['y'][idx, 2] for idx in neighbor_indices]),
+                    np.nanmean([model['y'][idx, 3] for idx in neighbor_indices])
+                ]
                 avg_new_params.append(avg_params)
             else:
                 avg_new_params.append([np.nan, np.nan, np.nan, np.nan])
@@ -635,19 +638,42 @@ def main():
             
             with col1:
                 st.write(f"**Spectrum {i+1}:** {results['new_filenames'][i]}")
-                st.write(f"**Formula:** {results['new_formulas'][i]}")
                 
-                # Use average parameters from neighbors
-                if results['knn_indices'] and len(results['knn_indices']) > i and len(results['knn_indices'][i]) > 0:
-                    st.write(f"**log(n):** {results['avg_new_params'][i, 0]:.2f}")
-                    st.write(f"**T_ex (K):** {results['avg_new_params'][i, 1]:.2f}")
-                    st.write(f"**Velocity:** {results['avg_new_params'][i, 2]:.2f}")
-                    st.write(f"**FWHM:** {results['avg_new_params'][i, 3]:.2f}")
+                # Calculate neighbor-based estimates exactly like 2D app
+                if results.get('knn_indices') and len(results['knn_indices']) > i and len(results['knn_indices'][i]) > 0:
+                    neighbor_indices = results['knn_indices'][i]
+                    avg_params = [
+                        np.nanmean(model['y'][neighbor_indices, 0]),
+                        np.nanmean(model['y'][neighbor_indices, 1]),
+                        np.nanmean(model['y'][neighbor_indices, 2]),
+                        np.nanmean(model['y'][neighbor_indices, 3])
+                    ]
+                    std_params = [
+                        np.nanstd(model['y'][neighbor_indices, 0]),
+                        np.nanstd(model['y'][neighbor_indices, 1]),
+                        np.nanstd(model['y'][neighbor_indices, 2]),
+                        np.nanstd(model['y'][neighbor_indices, 3])
+                    ]
+                    neighbor_formulas = [model['formulas'][idx] for idx in neighbor_indices]
+                    most_common_formula = max(set(neighbor_formulas), key=neighbor_formulas.count) if neighbor_formulas else "Unknown"
                 else:
-                    st.write("**log(n):** No neighbors found")
-                    st.write("**T_ex (K):** No neighbors found")
-                    st.write("**Velocity:** No neighbors found")
-                    st.write("**FWHM:** No neighbors found")
+                    avg_params = [np.nan, np.nan, np.nan, np.nan]
+                    std_params = [np.nan, np.nan, np.nan, np.nan]
+                    most_common_formula = "Unknown"
+
+                st.write(f"**Molecule Formula (neighbors):** {most_common_formula}")
+
+                param_labels = ['log(N)', 'T_ex (K)', 'Velocity (km/s)', 'FWHM (km/s)']
+                param_table = {
+                    'Parameter': param_labels,
+                    'Value': [
+                        f"{avg_params[0]:.2f}" if not np.isnan(avg_params[0]) else "N/A",
+                        f"{avg_params[1]:.2f}" if not np.isnan(avg_params[1]) else "N/A",
+                        f"{avg_params[2]:.2f}" if not np.isnan(avg_params[2]) else "N/A",
+                        f"{avg_params[3]:.2f}" if not np.isnan(avg_params[3]) else "N/A",
+                    ]
+                }
+                st.table(pd.DataFrame(param_table))
             
             with col2:
                 spectrum_fig = create_spectrum_plot(
@@ -748,10 +774,10 @@ def main():
                     
                     st.write("**Average parameters of neighbors:**")
                     avg_params = {
-                        'log(n)': np.mean([model['y'][idx, 0] for idx in neighbor_indices]),
-                        'T_ex (K)': np.mean([model['y'][idx, 1] for idx in neighbor_indices]),
-                        'Velocity': np.mean([model['y'][idx, 2] for idx in neighbor_indices]),
-                        'FWHM': np.mean([model['y'][idx, 3] for idx in neighbor_indices])
+                        'log(n)': np.nanmean([model['y'][idx, 0] for idx in neighbor_indices]),
+                        'T_ex (K)': np.nanmean([model['y'][idx, 1] for idx in neighbor_indices]),
+                        'Velocity': np.nanmean([model['y'][idx, 2] for idx in neighbor_indices]),
+                        'FWHM': np.nanmean([model['y'][idx, 3] for idx in neighbor_indices])
                     }
                     
                     avg_df = pd.DataFrame([avg_params])
