@@ -787,18 +787,23 @@ def main():
                 if neighbor_indices:
                     neighbor_data = []
                     for idx in neighbor_indices:
+                        # Distance computed in the same space used for KNN (2D if used, else 3D)
+                        if (
+                            results.get('knn_space') == '2d'
+                            and 'embedding_2d' in model
+                            and results.get('new_embeddings_2d') is not None
+                        ):
+                            dist = np.linalg.norm(model['embedding_2d'][idx] - results['new_embeddings_2d'][i])
+                        else:
+                            dist = np.linalg.norm(model['embedding'][idx] - results['new_embeddings'][i])
+
                         neighbor_data.append({
                             'Formula': model['formulas'][idx],
                             'log(n)': f"{model['y'][idx, 0]:.2f}",
                             'T_ex (K)': f"{model['y'][idx, 1]:.2f}",
                             'Velocity': f"{model['y'][idx, 2]:.2f}",
                             'FWHM': f"{model['y'][idx, 3]:.2f}",
-                            # Distance computed in the same space used for KNN (2D if used, else 3D)
-                            'Distance': f"{(
-                                np.linalg.norm(model['embedding_2d'][idx] - results['new_embeddings_2d'][i])
-                                if results.get('knn_space') == '2d' and 'embedding_2d' in model and results.get('new_embeddings_2d') is not None
-                                else np.linalg.norm(model['embedding'][idx] - results['new_embeddings'][i])
-                            ):.4f}"
+                            'Distance': f"{dist:.4f}"
                         })
                     
                     neighbor_df = pd.DataFrame(neighbor_data)
