@@ -509,6 +509,224 @@ def create_spectrum_plot(frequencies, intensities, title):
     
     return fig
 
+def plot_parameter_vs_neighbors(model, results, selected_idx, max_neighbors=20, expected_values=None, expected_errors=None):
+    if selected_idx >= len(results['new_embeddings']):
+        return None
+    
+    new_embedding = results['new_embeddings'][selected_idx]
+    filename = results['new_filenames'][selected_idx]
+    
+    neighbor_range = range(1, min(max_neighbors + 1, len(model['embedding']) + 1))
+    
+    param_data = {
+        'n_neighbors': [],
+        'logn_mean': [], 'logn_std': [],
+        'tex_mean': [], 'tex_std': [],
+        'velo_mean': [], 'velo_std': [],
+        'fwhm_mean': [], 'fwhm_std': []
+    }
+    
+    for k in neighbor_range:
+        knn = NearestNeighbors(n_neighbors=k, metric='euclidean')
+        knn.fit(model['embedding'])
+        distances, indices = knn.kneighbors([new_embedding])
+        
+        param_data['n_neighbors'].append(k)
+        
+        for i, param_name in enumerate(['logn', 'tex', 'velo', 'fwhm']):
+            param_values = model['y'][indices[0], i]
+            valid_values = param_values[~np.isnan(param_values)]
+            
+            if len(valid_values) > 0:
+                param_data[f'{param_name}_mean'].append(np.mean(valid_values))
+                param_data[f'{param_name}_std'].append(np.std(valid_values))
+            else:
+                param_data[f'{param_name}_mean'].append(np.nan)
+                param_data[f'{param_name}_std'].append(np.nan)
+    
+    max_neighbors_avg = {}
+    for i, param_name in enumerate(['logn', 'tex', 'velo', 'fwhm']):
+        max_neighbors_avg[param_name] = param_data[f'{param_name}_mean'][-1] if len(param_data[f'{param_name}_mean']) > 0 else np.nan
+    
+    fig = make_subplots(
+        rows=2, cols=2,
+        subplot_titles=['log(N)', 'T_ex (K)', 'Velocity (km/s)', 'FWHM (km/s)']
+    )
+    
+    param_names = ['logn', 'tex', 'velo', 'fwhm']
+    param_labels = ['log(N)', 'T_ex (K)', 'Velocity (km/s)', 'FWHM (km/s)']
+    
+    for i, param in enumerate(param_names):
+        row = (i // 2) + 1
+        col = (i % 2) + 1
+        
+        fig.add_trace(
+            go.Scatter(
+                x=param_data['n_neighbors'],
+                y=param_data[f'{param}_mean'],
+                mode='lines+markers',
+                name=f'{param_labels[i]}',
+                line=dict(color='blue')
+            ),
+            row=row, col=col
+        )
+        
+        if expected_values is not None and expected_errors is not None and not np.isnan(expected_values[i]):
+            fig.add_trace(
+                go.Scatter(
+                    x=[neighbor_range[0], neighbor_range[-1]],
+                    y=[expected_values[i], expected_values[i]],
+                    mode='lines',
+                    name=f'{param_labels[i]} Expected',
+                    line=dict(color='red'),
+                    showlegend=False
+                ),
+                row=row, col=col
+            )
+            
+            if not np.isnan(expected_errors[i]):
+                fig.add_trace(
+                    go.Scatter(
+                        x=[neighbor_range[0], neighbor_range[-1], neighbor_range[-1], neighbor_range[0]],
+                        y=[expected_values[i] - expected_errors[i], expected_values[i] - expected_errors[i], 
+                           expected_values[i] + expected_errors[i], expected_values[i] + expected_errors[i]],
+                        fill='toself',
+                        fillcolor='rgba(255, 0, 0, 0.2)',
+                        line=dict(color='rgba(255, 255, 255, 0)'),
+                        name=f'{param_labels[i]} Error Band',
+                        showlegend=False
+                    ),
+                    row=row, col=col
+                )
+        
+        fig.update_xaxes(title_text='Number of Neighbors', row=row, col=col)
+        fig.update_yaxes(title_text=param_labels[i], row=row, col=col)
+    
+    fig.update_layout(
+        height=600,
+        title_text=f"Parameter Convergence vs. Number of Neighbors: {filename}",
+        showlegend=False
+    )
+    
+    return fig, max_neighbors_avg
+
+def plot_neighbors_logn_tex(model, results, selected_idx, knn_neighbors, expected_values=None, expected_errors=None):
+    if selected_idx >= len(results['new_embeddings']):
+        return None
+    
+    neighbor_indices = results['knn_indices'][selected_idx]
+    
+    if not neighbor_indices:
+        return None
+    
+    neighbor_logn = model['y'][neighbor_indices, 0]
+    neighbor_tex = model['y'][neighbor_indices, 1]
+    neighbor_formulas = [model['formulas'][idx] for idx in neighbor_indices]
+    
+    avg_logn = np.nanmean(neighbor_logn)
+    avg_tex = np.nanmean(neighbor_tex)
+    std_logn = np.nanstd(neighbor_logn)
+    std_tex = np.nanstd(neighbor_tex)
+    
+    fig = go.Figure()
+    
+    fig.add_trace(go.Scatter(
+        x=neighbor_logn,
+        y=neighbor_tex,
+        mode='markers',
+        marker=dict(color='blue', size=10),
+        name='Neighbors',
+        text=neighbor_formulas,
+        hovertemplate='<b>Formula:</b> %{text}<br><b>log(N):</b> %{x:.2f}<br><b>T_ex:</b> %{y:.2f} K<extra></extra>'
+    ))
+    
+    if not np.isnan(avg_logn) and not np.isnan(avg_tex):
+        fig.add_trace(go.Scatter(
+            x=[avg_logn],
+            y=[avg_tex],
+            mode='markers',
+            marker=dict(color='red', size=15, symbol='star'),
+            name='Average of Neighbors',
+            hovertemplate='<b>Average</b><br><b>log(N):</b> %{x:.2f} ± %{customdata[0]:.2f}<br><b>T_ex:</b> %{y:.2f} ± %{customdata[1]:.2f} K<extra></extra>',
+            customdata=[[std_logn, std_tex]]
+        ))
+        
+        if not np.isnan(std_logn) and std_logn > 0:
+            fig.add_trace(go.Scatter(
+                x=[avg_logn - std_logn, avg_logn + std_logn],
+                y=[avg_tex, avg_tex],
+                mode='lines',
+                line=dict(color='red', width=2, dash='dash'),
+                name='log(N) Std Dev',
+                showlegend=False,
+                hovertemplate='<b>log(N) Std Dev:</b> ±%{x:.2f}<extra></extra>'
+            ))
+        
+        if not np.isnan(std_tex) and std_tex > 0:
+            fig.add_trace(go.Scatter(
+                x=[avg_logn, avg_logn],
+                y=[avg_tex - std_tex, avg_tex + std_tex],
+                mode='lines',
+                line=dict(color='red', width=2, dash='dash'),
+                name='T_ex Std Dev',
+                showlegend=False,
+                hovertemplate='<b>T_ex Std Dev:</b> ±%{y:.2f} K<extra></extra>'
+            ))
+    
+    if (expected_values is not None and 
+        not np.isnan(expected_values[0]) and 
+        not np.isnan(expected_values[1])):
+        
+        fig.add_trace(go.Scatter(
+            x=[expected_values[0]],
+            y=[expected_values[1]],
+            mode='markers',
+            marker=dict(color='green', size=15, symbol='diamond'),
+            name='Expected Value',
+            hovertemplate='<b>Expected</b><br><b>log(N):</b> %{x:.2f}<br><b>T_ex:</b> %{y:.2f} K<extra></extra>'
+        ))
+        
+        if (expected_errors is not None and 
+            not np.isnan(expected_errors[0]) and 
+            not np.isnan(expected_errors[1]) and
+            expected_errors[0] > 0 and expected_errors[1] > 0):
+            
+            fig.add_trace(go.Scatter(
+                x=[expected_values[0] - expected_errors[0], expected_values[0] + expected_errors[0]],
+                y=[expected_values[1], expected_values[1]],
+                mode='lines',
+                line=dict(color='green', width=3),
+                name='log(N) Error',
+                showlegend=False,
+                hovertemplate='<b>log(N) Error:</b> ±%{x:.2f}<extra></extra>'
+            ))
+            
+            fig.add_trace(go.Scatter(
+                x=[expected_values[0], expected_values[0]],
+                y=[expected_values[1] - expected_errors[1], expected_values[1] + expected_errors[1]],
+                mode='lines',
+                line=dict(color='green', width=3),
+                name='T_ex Error',
+                showlegend=False,
+                hovertemplate='<b>T_ex Error:</b> ±%{y:.2f} K<extra></extra>'
+            ))
+    
+    fig.update_layout(
+        title=f"Neighbors in LogN vs T_ex Space (k={knn_neighbors})",
+        xaxis_title="log(N)",
+        yaxis_title="T_ex (K)",
+        height=500,
+        showlegend=True,
+        legend=dict(
+            yanchor="top",
+            y=0.99,
+            xanchor="left",
+            x=0.01
+        )
+    )
+    
+    return fig
+
 def main():
     
     st.image("NGC6523_BVO_2.jpg", use_column_width=True)
@@ -745,6 +963,37 @@ def main():
                         
                         neighbor_df = pd.DataFrame(neighbor_data)
                         st.dataframe(neighbor_df, use_container_width=True)
+                        
+                        # Mostrar el gráfico de convergencia de parámetros
+                        st.markdown("**Parameter Convergence Analysis**")
+                        max_neighbors_plot = 20  # Puedes hacer esto configurable si lo deseas
+                        convergence_fig, max_neighbors_avg = plot_parameter_vs_neighbors(
+                            model, results, spectrum_idx, max_neighbors_plot,
+                            None, None  # Por ahora sin valores esperados
+                        )
+                        if convergence_fig:
+                            st.plotly_chart(convergence_fig, use_container_width=True)
+                            
+                            st.markdown("**Average Values for Maximum Neighbors**")
+                            avg_data = {
+                                'Parameter': ['log(N)', 'T_ex (K)', 'Velocity (km/s)', 'FWHM (km/s)'],
+                                'Average Value': [
+                                    f"{max_neighbors_avg['logn']:.2f}" if not np.isnan(max_neighbors_avg['logn']) else "N/A",
+                                    f"{max_neighbors_avg['tex']:.2f}" if not np.isnan(max_neighbors_avg['tex']) else "N/A",
+                                    f"{max_neighbors_avg['velo']:.2f}" if not np.isnan(max_neighbors_avg['velo']) else "N/A",
+                                    f"{max_neighbors_avg['fwhm']:.2f}" if not np.isnan(max_neighbors_avg['fwhm']) else "N/A"
+                                ]
+                            }
+                            st.table(pd.DataFrame(avg_data))
+                        
+                        # Mostrar el gráfico LogN vs T_ex
+                        st.markdown("**LogN vs T_ex Analysis**")
+                        logn_tex_fig = plot_neighbors_logn_tex(
+                            model, results, spectrum_idx, len(neighbor_indices),
+                            None, None  # Por ahora sin valores esperados
+                        )
+                        if logn_tex_fig:
+                            st.plotly_chart(logn_tex_fig, use_container_width=True)
     
     with tab4:
         st.markdown('<h2 class="sub-header">K-Nearest Neighbors Analysis</h2>', unsafe_allow_html=True)
