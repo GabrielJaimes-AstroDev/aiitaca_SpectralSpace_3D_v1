@@ -214,6 +214,7 @@ def analyze_spectra(model, spectra_files, knn_neighbors):
     new_params = []
     new_filenames = []
     new_embeddings = []
+    new_embeddings_2d = []  # optional, if model provides 2D UMAP
     new_pca_components = []
     
     for file in spectra_files:
@@ -229,6 +230,13 @@ def analyze_spectra(model, spectra_files, knn_neighbors):
             X_scaled = scaler.transform([interpolated])
             X_pca = pca.transform(X_scaled)
             X_umap = umap_model.transform(X_pca)
+            # If the model includes a 2D UMAP, transform there as well to match 2D app
+            X_umap_2d = None
+            if 'umap_2d' in model:
+                try:
+                    X_umap_2d = model['umap_2d'].transform(X_pca)
+                except Exception:
+                    X_umap_2d = None
             
             new_spectra_data.append(interpolated)
             new_formulas.append(formula)
@@ -236,6 +244,8 @@ def analyze_spectra(model, spectra_files, knn_neighbors):
             new_filenames.append(filename)
             new_embeddings.append(X_umap[0])
             new_pca_components.append(X_pca[0])
+            if X_umap_2d is not None:
+                new_embeddings_2d.append(X_umap_2d[0])
     
     if len(new_embeddings) == 0:
         return None
@@ -244,9 +254,16 @@ def analyze_spectra(model, spectra_files, knn_neighbors):
     new_params = np.array(new_params)
     new_formulas = np.array(new_formulas)
     new_pca_components = np.array(new_pca_components)
+    if len(new_embeddings_2d) > 0:
+        new_embeddings_2d = np.array(new_embeddings_2d)
     
-    # Find KNN neighbors
-    knn_indices = find_knn_neighbors(model['embedding'], new_embeddings, k=knn_neighbors)
+    # Find KNN neighbors: prefer 2D space if available to match 2D app behavior
+    knn_space = '3d'
+    if 'embedding_2d' in model and isinstance(model['embedding_2d'], np.ndarray) and len(new_embeddings_2d) == len(new_embeddings):
+        knn_indices = find_knn_neighbors(model['embedding_2d'], new_embeddings_2d, k=knn_neighbors)
+        knn_space = '2d'
+    else:
+        knn_indices = find_knn_neighbors(model['embedding'], new_embeddings, k=knn_neighbors)
     
     avg_new_params = []
     for i in range(len(new_embeddings)):
@@ -274,8 +291,10 @@ def analyze_spectra(model, spectra_files, knn_neighbors):
         'new_params': new_params,
         'new_filenames': new_filenames,
         'new_embeddings': new_embeddings,
+        'new_embeddings_2d': new_embeddings_2d if len(new_embeddings_2d) > 0 else None,
         'new_pca_components': new_pca_components,
         'knn_indices': knn_indices,
+        'knn_space': knn_space,
         'avg_new_params': avg_new_params
     }
 
@@ -298,7 +317,6 @@ def create_3d_scatter(embeddings, color_values, title, color_label, color_scale=
     if show_legend and legend_dict is not None and color_param == 'formula':
         unique_formulas = list(legend_dict.keys())
         
-        import plotly.express as px
         colors = px.colors.qualitative.Set1 + px.colors.qualitative.Set2 + px.colors.qualitative.Set3
         formula_colors = {formula: colors[i % len(colors)] for i, formula in enumerate(unique_formulas)}
         
@@ -688,6 +706,15 @@ def main():
         
         color_param_2d = st.selectbox("Color by", param_options, index=4, key='color_2d')
         
+        # Choose embeddings for 2D page: prefer model['embedding_2d'] + results['new_embeddings_2d'] when available
+        if 'embedding_2d' in model and model.get('embedding_2d') is not None and results.get('new_embeddings_2d') is not None:
+            combined_embeddings_2d = np.vstack([model['embedding_2d'], results['new_embeddings_2d']])
+            selected_indices_2d = list(range(len(model['embedding_2d']), len(combined_embeddings_2d)))
+        else:
+            # Fallback: project with first two dims of 3D (still plotted as 2D)
+            combined_embeddings_2d = np.vstack([model['embedding'][:, :2], results['new_embeddings'][:, :2]])
+            selected_indices_2d = list(range(len(model['embedding']), len(model['embedding']) + len(results['new_embeddings'])))
+
         if color_param_2d == 'formula':
             color_values_2d = color_values
             color_label_2d = "Formula"
@@ -701,12 +728,12 @@ def main():
         
         # Create the plot
         fig_2d = create_2d_scatter(
-            combined_embeddings, 
+            combined_embeddings_2d, 
             color_values_2d, 
             "2D UMAP Projection (Training + New Spectra)", 
             color_label_2d,
             color_scale=color_scale_2d,
-            selected_indices=selected_indices
+            selected_indices=selected_indices_2d
         )
         
         st.plotly_chart(fig_2d, use_container_width=True)
@@ -766,7 +793,12 @@ def main():
                             'T_ex (K)': f"{model['y'][idx, 1]:.2f}",
                             'Velocity': f"{model['y'][idx, 2]:.2f}",
                             'FWHM': f"{model['y'][idx, 3]:.2f}",
-                            'Distance': f"{np.linalg.norm(model['embedding'][idx] - results['new_embeddings'][i]):.4f}"
+                            # Distance computed in the same space used for KNN (2D if used, else 3D)
+                            'Distance': f"{(
+                                np.linalg.norm(model['embedding_2d'][idx] - results['new_embeddings_2d'][i])
+                                if results.get('knn_space') == '2d' and 'embedding_2d' in model and results.get('new_embeddings_2d') is not None
+                                else np.linalg.norm(model['embedding'][idx] - results['new_embeddings'][i])
+                            ):.4f}"
                         })
                     
                     neighbor_df = pd.DataFrame(neighbor_data)
