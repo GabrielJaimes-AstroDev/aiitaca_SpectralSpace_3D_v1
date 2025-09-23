@@ -249,25 +249,22 @@ def analyze_spectra(model, spectra_files, knn_neighbors):
     knn_indices = find_knn_neighbors(model['embedding'], new_embeddings, k=knn_neighbors)
     
     avg_new_params = []
+    uncertainties_new_params = []
     for i in range(len(new_embeddings)):
         if knn_indices and len(knn_indices) > i:
             neighbor_indices = knn_indices[i]
             if neighbor_indices:
-                # Calculate average parameters from neighbors
-                avg_params = [
-                    np.nanmean([model['y'][idx, 0] for idx in neighbor_indices]),
-                    np.nanmean([model['y'][idx, 1] for idx in neighbor_indices]),
-                    np.nanmean([model['y'][idx, 2] for idx in neighbor_indices]),
-                    np.nanmean([model['y'][idx, 3] for idx in neighbor_indices])
-                ]
-                avg_new_params.append(avg_params)
+                expected_values, uncertainties = calculate_parameter_uncertainty(model, neighbor_indices)
+                avg_new_params.append(expected_values)
+                uncertainties_new_params.append(uncertainties)
             else:
                 avg_new_params.append([np.nan, np.nan, np.nan, np.nan])
+                uncertainties_new_params.append([np.nan, np.nan, np.nan, np.nan])
         else:
             avg_new_params.append([np.nan, np.nan, np.nan, np.nan])
-    
+            uncertainties_new_params.append([np.nan, np.nan, np.nan, np.nan])
     avg_new_params = np.array(avg_new_params)
-    
+    uncertainties_new_params = np.array(uncertainties_new_params)
     return {
         'new_spectra_data': new_spectra_data,
         'new_formulas': new_formulas,
