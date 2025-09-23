@@ -221,20 +221,18 @@ def analyze_spectra(model, spectra_files, knn_neighbors):
             file, model['reference_frequencies'])
         
         if interpolated is not None:
-            # Transform the spectrum
             scaler = model['scaler']
             pca = model['pca']
             umap_model = model['umap']
-            
             X_scaled = scaler.transform([interpolated])
             X_pca = pca.transform(X_scaled)
             X_umap = umap_model.transform(X_pca)
-            
+            # Usar los 20 componentes para KNN, pero solo los primeros 3 para visualización
             new_spectra_data.append(interpolated)
             new_formulas.append(formula)
             new_params.append(params)
             new_filenames.append(filename)
-            new_embeddings.append(X_umap[0])
+            new_embeddings.append(X_umap[0])  # X_umap[0] es de tamaño 20
             new_pca_components.append(X_pca[0])
     
     if len(new_embeddings) == 0:
@@ -244,8 +242,7 @@ def analyze_spectra(model, spectra_files, knn_neighbors):
     new_params = np.array(new_params)
     new_formulas = np.array(new_formulas)
     new_pca_components = np.array(new_pca_components)
-    
-    # Find KNN neighbors
+    # Usar todos los componentes UMAP para KNN
     knn_indices = find_knn_neighbors(model['embedding'], new_embeddings, k=knn_neighbors)
     
     avg_new_params = []
@@ -366,7 +363,7 @@ def create_3d_scatter(embeddings, color_values, title, color_label, color_scale=
                 opacity=0.7,
                 colorbar=dict(
                     title=color_label,
-                    len=0.5,  # Make colorbar shorter vertically
+                    len=0.5,
                     yanchor='middle',
                     y=0.5
                 ),
@@ -575,49 +572,40 @@ def main():
     st.markdown('</div>', unsafe_allow_html=True)
     
     tab1, tab2, tab3, tab4 = st.tabs(["3D Projection", "2D Projection", "Spectrum View", "KNN Analysis"])
-    
+    # Usar solo las primeras 3 dimensiones para visualización
+    combined_embeddings = np.vstack([model['embedding'], results['new_embeddings']])
+    combined_embeddings_3d = combined_embeddings[:, :3]
+    combined_embeddings_2d = combined_embeddings[:, :2]
     with tab1:
         st.markdown('<h2 class="sub-header">3D UMAP Projection</h2>', unsafe_allow_html=True)
-        
         param_options = ['logn', 'tex', 'velo', 'fwhm', 'formula']
         color_param = st.selectbox("Color by", param_options, index=4)
-        
-        combined_embeddings = np.vstack([model['embedding'], results['new_embeddings']])
-        
         if color_param == 'formula':
-            # For formula coloring, we need to create a numeric mapping
             all_formulas = np.concatenate([model['formulas'], results['new_formulas']])
             unique_formulas = np.unique(all_formulas)
             formula_to_num = {formula: i for i, formula in enumerate(unique_formulas)}
             color_values = np.array([formula_to_num[f] for f in all_formulas])
             color_label = "Formula"
             color_scale = 'viridis'
-            
             legend_dict = {formula: formula_to_num[formula] for formula in unique_formulas}
             show_legend = True
         else:
             param_idx = param_options.index(color_param)
-            if param_idx < 4:  # It's a parameter
-                # For training data
+            if param_idx < 4:
                 training_params = model['y'][:, param_idx]
-                # For new data, use average from neighbors
                 new_data_params = results['avg_new_params'][:, param_idx]
                 color_values = np.concatenate([training_params, new_data_params])
                 color_label = param_options[param_idx]
                 color_scale = 'viridis'
                 show_legend = False
                 legend_dict = None
-        
-        # Create the plot
         selected_indices = list(range(len(model['embedding']), len(combined_embeddings)))
-
         all_formulas = np.concatenate([model['formulas'], results['new_formulas']])
         all_params = np.vstack([model['y'], results['avg_new_params']])
-        
         fig_3d = create_3d_scatter(
-            combined_embeddings, 
-            color_values, 
-            "3D UMAP Projection (Training + New Spectra)", 
+            combined_embeddings_3d,
+            color_values,
+            "3D UMAP Projection (Training + New Spectra)",
             color_label,
             color_scale=color_scale,
             selected_indices=selected_indices,
@@ -626,9 +614,8 @@ def main():
             is_training=True,
             show_legend=show_legend,
             legend_dict=legend_dict,
-            color_param=color_param  # Añadir este parámetro
+            color_param=color_param
         )
-        
         st.plotly_chart(fig_3d, use_container_width=True)
         
         st.markdown('<h3 class="sub-header">New Spectrum Details</h3>', unsafe_allow_html=True)
@@ -662,30 +649,25 @@ def main():
     
     with tab2:
         st.markdown('<h2 class="sub-header">2D UMAP Projection</h2>', unsafe_allow_html=True)
-        
         color_param_2d = st.selectbox("Color by", param_options, index=4, key='color_2d')
-        
         if color_param_2d == 'formula':
             color_values_2d = color_values
             color_label_2d = "Formula"
             color_scale_2d = 'viridis'
         else:
             param_idx = param_options.index(color_param_2d)
-            if param_idx < 4:  # It's a parameter
+            if param_idx < 4:
                 color_values_2d = np.concatenate([model['y'][:, param_idx], results['avg_new_params'][:, param_idx]])
                 color_label_2d = param_options[param_idx]
                 color_scale_2d = 'viridis'
-        
-        # Create the plot
         fig_2d = create_2d_scatter(
-            combined_embeddings, 
-            color_values_2d, 
-            "2D UMAP Projection (Training + New Spectra)", 
+            combined_embeddings_2d,
+            color_values_2d,
+            "2D UMAP Projection (Training + New Spectra)",
             color_label_2d,
             color_scale=color_scale_2d,
             selected_indices=selected_indices
         )
-        
         st.plotly_chart(fig_2d, use_container_width=True)
     
     with tab3:
