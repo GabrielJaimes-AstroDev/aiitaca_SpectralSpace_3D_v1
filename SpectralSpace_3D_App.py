@@ -881,10 +881,26 @@ def main():
                 
                 # Use average parameters from neighbors
                 if results['knn_indices'] and len(results['knn_indices']) > i and len(results['knn_indices'][i]) > 0:
-                    st.write(f"**log(n):** {results['avg_new_params'][i, 0]:.2f}")
-                    st.write(f"**T_ex (K):** {results['avg_new_params'][i, 1]:.2f}")
-                    st.write(f"**Velocity:** {results['avg_new_params'][i, 2]:.2f}")
-                    st.write(f"**FWHM:** {results['avg_new_params'][i, 3]:.2f}")
+                    neighbor_indices = results['knn_indices'][i]
+                    if neighbor_indices:
+                        avg_params = [
+                            np.nanmean(model['y'][neighbor_indices, 0]),
+                            np.nanmean(model['y'][neighbor_indices, 1]),
+                            np.nanmean(model['y'][neighbor_indices, 2]),
+                            np.nanmean(model['y'][neighbor_indices, 3])
+                        ]
+                        
+                        std_params = [
+                            np.nanstd(model['y'][neighbor_indices, 0]),
+                            np.nanstd(model['y'][neighbor_indices, 1]),
+                            np.nanstd(model['y'][neighbor_indices, 2]),
+                            np.nanstd(model['y'][neighbor_indices, 3])
+                        ]
+                        
+                        st.write(f"**log(n):** {avg_params[0]:.2f} ± {std_params[0]:.2f}")
+                        st.write(f"**T_ex (K):** {avg_params[1]:.2f} ± {std_params[1]:.2f}")
+                        st.write(f"**Velocity:** {avg_params[2]:.2f} ± {std_params[2]:.2f}")
+                        st.write(f"**FWHM:** {avg_params[3]:.2f} ± {std_params[3]:.2f}")
                 else:
                     st.write("**log(n):** No neighbors found")
                     st.write("**T_ex (K):** No neighbors found")
