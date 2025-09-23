@@ -606,8 +606,8 @@ def main():
                 legend_dict = None
         
         # Create the plot
-        selected_indices = list(range(len(model['embedding'], len(combined_embeddings))))
-        
+        selected_indices = list(range(len(model['embedding']), len(combined_embeddings)))
+
         all_formulas = np.concatenate([model['formulas'], results['new_formulas']])
         all_params = np.vstack([model['y'], results['avg_new_params']])
         
